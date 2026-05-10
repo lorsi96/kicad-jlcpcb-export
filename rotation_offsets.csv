@@ -1,0 +1,6 @@
+Designator,Offset
+# Add one row per part whose JLC orientation differs from KiCad's footprint convention.
+# Common offenders: ESP32 module, USB-C connector, terminal blocks, QFN packages.
+# Example:
+# U1,270
+# J1,90

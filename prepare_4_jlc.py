@@ -1,0 +1,140 @@
+"""Post-process KiCad exports for JLCPCB upload.
+
+Run from the repo root:
+    python3 scripts/prepare_4_jlc.py
+
+Reads:
+  output/Gerber/*.gbr / *.drl  -> zipped into output/Gerber/gbr_files.zip
+  output/PnP/*-cpl.csv         -> column headers renamed, rotations corrected
+  output/Assembly/*-bom.csv    -> column headers renamed
+  scripts/rotation_offsets.csv
+
+Writes:
+  output/Gerber/gbr_files.zip
+  output/Assembly/*-cpl.csv    (JLC-ready CPL)
+  output/Assembly/*-bom.csv    (JLC-ready BOM, in place)
+"""
+
+import csv
+import logging
+import shutil
+import zipfile
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger()
+
+SCRIPT_DIR = Path(__file__).parent
+REPO_ROOT = SCRIPT_DIR.parent
+GERBER_DIR = REPO_ROOT / "output" / "Gerber"
+PNP_DIR = REPO_ROOT / "output" / "PnP"
+ASSEMBLY_DIR = REPO_ROOT / "output" / "Assembly"
+ROTATION_CSV = SCRIPT_DIR / "rotation_offsets.csv"
+
+GERBER_SUFFIXES = {"gtl", "g2", "g3", "gbl", "gta", "gba", "gtp", "gbp",
+                   "gto", "gbo", "gts", "gbs", "gbr", "gm1", "drl"}
+
+CPL_COLUMN_RENAMES = {
+    "Ref": "Designator",
+    "PosX": "Mid X",
+    "PosY": "Mid Y",
+    "Rot": "Rotation",
+    "Side": "Layer",
+}
+
+BOM_COLUMN_RENAMES = {
+    "Reference": "Designator",
+    "Value": "Comment",
+}
+
+
+def load_rotation_offsets():
+    offsets = {}
+    if not ROTATION_CSV.exists():
+        return offsets
+    with open(ROTATION_CSV, newline="") as f:
+        for row in csv.DictReader(r for r in f if not r.startswith("#")):
+            offsets[row["Designator"].strip()] = int(row["Offset"].strip())
+    logger.info("Loaded %d rotation offsets", len(offsets))
+    return offsets
+
+
+def zip_gerbers():
+    gbr_files = [f for f in GERBER_DIR.iterdir()
+                 if f.suffix.lstrip(".").lower() in GERBER_SUFFIXES]
+    if not gbr_files:
+        logger.warning("No gerber/drill files found in %s", GERBER_DIR)
+        return
+    zip_path = GERBER_DIR / "gbr_files.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for f in gbr_files:
+            zf.write(f, f.name)
+    logger.info("Created %s (%d files)", zip_path, len(gbr_files))
+
+
+def fix_cpl(rotation_offsets):
+    ASSEMBLY_DIR.mkdir(parents=True, exist_ok=True)
+    cpl_files = list(PNP_DIR.glob("*-cpl.csv")) + list(PNP_DIR.glob("*pos.csv"))
+    if not cpl_files:
+        logger.warning("No CPL/pos CSV files found in %s", PNP_DIR)
+        return
+
+    for src in cpl_files:
+        dest = ASSEMBLY_DIR / src.name
+        shutil.copy(src, dest)
+        logger.info("Processing %s -> %s", src.name, dest)
+
+        lines = dest.read_text().splitlines()
+        out = []
+        for i, line in enumerate(lines):
+            if i == 0:
+                headers = line.split(",")
+                headers = [CPL_COLUMN_RENAMES.get(h.strip(), h.strip()) for h in headers]
+                out.append(",".join(headers))
+                continue
+            row = line.split(",")
+            if len(row) < 6:
+                out.append(line)
+                continue
+            designator = row[0].strip('"')
+            try:
+                rotation = int(float(row[5]))
+            except ValueError:
+                out.append(line)
+                continue
+            if designator in rotation_offsets:
+                rotation = (rotation + rotation_offsets[designator]) % 360
+                logger.info("  %s rotation -> %d", designator, rotation)
+            row[5] = str(rotation)
+            out.append(",".join(row))
+        dest.write_text("\n".join(out) + "\n")
+
+    logger.info("CPL files written to %s", ASSEMBLY_DIR)
+
+
+def fix_bom():
+    bom_files = list(ASSEMBLY_DIR.glob("*-bom.csv"))
+    if not bom_files:
+        logger.warning("No BOM CSV files found in %s", ASSEMBLY_DIR)
+        return
+    for bom in bom_files:
+        logger.info("Processing BOM %s", bom.name)
+        lines = bom.read_text().splitlines()
+        out = []
+        for i, line in enumerate(lines):
+            if i == 0:
+                headers = line.split(",")
+                headers = [BOM_COLUMN_RENAMES.get(h.strip(), h.strip()) for h in headers]
+                out.append(",".join(headers))
+            else:
+                out.append(line)
+        bom.write_text("\n".join(out) + "\n")
+    logger.info("BOM files updated in %s", ASSEMBLY_DIR)
+
+
+if __name__ == "__main__":
+    rotation_offsets = load_rotation_offsets()
+    zip_gerbers()
+    fix_cpl(rotation_offsets)
+    fix_bom()
+    logger.info("Done.")
