@@ -124,7 +124,7 @@ def fix_bom():
         for i, line in enumerate(lines):
             if i == 0:
                 headers = line.split(",")
-                headers = [BOM_COLUMN_RENAMES.get(h.strip(), h.strip()) for h in headers]
+                headers = [BOM_COLUMN_RENAMES.get(h.strip().strip('"'), h.strip()) for h in headers]
                 out.append(",".join(headers))
             else:
                 out.append(line)
