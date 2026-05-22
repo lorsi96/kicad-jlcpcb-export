@@ -17,6 +17,7 @@ Writes:
 
 import csv
 import logging
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -112,6 +113,26 @@ def fix_cpl(rotation_offsets):
     logger.info("CPL files written to %s", ASSEMBLY_DIR)
 
 
+def _expand_designator_ranges(designator_str: str) -> str:
+    """Expand dash-range shorthand to explicit comma-separated designators.
+
+    KiCad sometimes emits e.g. ``SW1-SW3`` or ``R3-R5,R12-R15``.
+    JLCPCB requires ``SW1,SW2,SW3`` / ``R3,R4,R5,R12,R13,R14,R15``.
+    """
+    parts = [p.strip() for p in designator_str.split(",")]
+    out = []
+    for part in parts:
+        m = re.fullmatch(r"([A-Za-z]+)(\d+)-(?:[A-Za-z]+)?(\d+)", part)
+        if m:
+            prefix, start, end = m.group(1), int(m.group(2)), int(m.group(3))
+            out.extend(f"{prefix}{n}" for n in range(start, end + 1))
+            logger.info("  Expanded range %s -> %s", part,
+                        ",".join(f"{prefix}{n}" for n in range(start, end + 1)))
+        else:
+            out.append(part)
+    return ",".join(out)
+
+
 def fix_bom():
     bom_files = list(ASSEMBLY_DIR.glob("*-bom.csv"))
     if not bom_files:
@@ -127,7 +148,12 @@ def fix_bom():
                 headers = [BOM_COLUMN_RENAMES.get(h.strip().strip('"'), h.strip()) for h in headers]
                 out.append(",".join(headers))
             else:
-                out.append(line)
+                # Parse with csv to correctly handle quoted fields containing commas.
+                row = next(csv.reader([line]))
+                if row:
+                    row[0] = _expand_designator_ranges(row[0])
+                # Re-quote all fields to stay consistent with KiCad's output style.
+                out.append(",".join(f'"{v}"' for v in row))
         bom.write_text("\n".join(out) + "\n")
     logger.info("BOM files updated in %s", ASSEMBLY_DIR)
 
