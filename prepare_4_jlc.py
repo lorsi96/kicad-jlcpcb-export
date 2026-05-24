@@ -50,12 +50,23 @@ BOM_COLUMN_RENAMES = {
 
 
 def load_rotation_offsets():
+    """Return a dict keyed by designator.
+
+    Each value is a dict with keys:
+      ``offset``   – rotation correction in degrees (int)
+      ``x_offset`` – correction added to Mid X in mm (int, default 0)
+      ``y_offset`` – correction added to Mid Y in mm (int, default 0)
+    """
     offsets = {}
     if not ROTATION_CSV.exists():
         return offsets
     with open(ROTATION_CSV, newline="") as f:
         for row in csv.DictReader(r for r in f if not r.startswith("#")):
-            offsets[row["Designator"].strip()] = int(row["Offset"].strip())
+            offsets[row["Designator"].strip()] = {
+                "offset":   int(row["Offset"].strip()),
+                "x_offset": int(row.get("x_offset", "0").strip() or "0"),
+                "y_offset": int(row.get("y_offset", "0").strip() or "0"),
+            }
     logger.info("Loaded %d rotation offsets", len(offsets))
     return offsets
 
@@ -104,8 +115,18 @@ def fix_cpl(rotation_offsets):
                 out.append(line)
                 continue
             if designator in rotation_offsets:
-                rotation = (rotation + rotation_offsets[designator]) % 360
-                logger.info("  %s rotation -> %d", designator, rotation)
+                corr = rotation_offsets[designator]
+                rotation = (rotation + corr["offset"]) % 360
+                x_off = corr["x_offset"]
+                y_off = corr["y_offset"]
+                if x_off:
+                    row[3] = str(float(row[3]) + x_off)
+                if y_off:
+                    row[4] = str(float(row[4]) + y_off)
+                logger.info(
+                    "  %s rotation -> %d, x_offset %+d, y_offset %+d",
+                    designator, rotation, x_off, y_off,
+                )
             row[5] = str(rotation)
             out.append(",".join(row))
         dest.write_text("\n".join(out) + "\n")

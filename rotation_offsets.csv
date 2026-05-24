@@ -1,6 +1,8 @@
-Designator,Offset
+Designator,Offset,x_offset,y_offset
 # Add one row per part whose JLC orientation differs from KiCad's footprint convention.
 # Common offenders: ESP32 module, USB-C connector, terminal blocks, QFN packages.
+# x_offset and y_offset are in mm; they are added to the CPL Mid X / Mid Y values.
+# x_offset and y_offset are optional and default to 0.
 # Example:
-# U1,270
-# J1,90
+# U1,270,0,0
+# J1,90,1,-2
