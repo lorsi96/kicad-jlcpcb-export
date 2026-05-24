@@ -30,7 +30,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 GERBER_DIR = REPO_ROOT / "output" / "Gerber"
 PNP_DIR = REPO_ROOT / "output" / "PnP"
 ASSEMBLY_DIR = REPO_ROOT / "output" / "Assembly"
-ROTATION_CSV = SCRIPT_DIR / "rotation_offsets.csv"
+ROTATION_CSV = REPO_ROOT / "rotation_offsets.csv"
 
 GERBER_SUFFIXES = {"gtl", "g1", "g2", "g3", "gbl", "gta", "gba", "gtp", "gbp",
                    "gto", "gbo", "gts", "gbs", "gbr", "gm1", "drl", "gbrjob"}
