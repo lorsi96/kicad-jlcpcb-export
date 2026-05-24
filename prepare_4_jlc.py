@@ -54,8 +54,8 @@ def load_rotation_offsets():
 
     Each value is a dict with keys:
       ``offset``   – rotation correction in degrees (int)
-      ``x_offset`` – correction added to Mid X in mm (int, default 0)
-      ``y_offset`` – correction added to Mid Y in mm (int, default 0)
+      ``x_offset`` – correction added to Mid X in 0.05 mm steps (int, default 0)
+      ``y_offset`` – correction added to Mid Y in 0.05 mm steps (int, default 0)
     """
     offsets = {}
     if not ROTATION_CSV.exists():
@@ -99,12 +99,19 @@ def fix_cpl(rotation_offsets):
         lines = dest.read_text().splitlines()
         out = []
         for i, line in enumerate(lines):
+            if not line.strip():
+                out.append(line)
+                continue
             if i == 0:
-                headers = line.split(",")
+                # Use csv.reader so quoted headers with commas are handled correctly.
+                headers = next(csv.reader([line]))
                 headers = [CPL_COLUMN_RENAMES.get(h.strip(), h.strip()) for h in headers]
                 out.append(",".join(headers))
                 continue
-            row = line.split(",")
+            # Use csv.reader to correctly handle quoted fields that contain commas
+            # (e.g. PhoenixContact footprint names like
+            #  "PhoenixContact_MSTBVA_2,5_2-G-5,08_1x02_P5.08mm_Vertical").
+            row = next(csv.reader([line]))
             if len(row) < 6:
                 out.append(line)
                 continue
@@ -120,15 +127,16 @@ def fix_cpl(rotation_offsets):
                 x_off = corr["x_offset"]
                 y_off = corr["y_offset"]
                 if x_off:
-                    row[3] = str(float(row[3]) + x_off)
+                    row[3] = str(float(row[3]) + x_off * 0.05)
                 if y_off:
-                    row[4] = str(float(row[4]) + y_off)
+                    row[4] = str(float(row[4]) + y_off * 0.05)
                 logger.info(
                     "  %s rotation -> %d, x_offset %+d, y_offset %+d",
                     designator, rotation, x_off, y_off,
                 )
             row[5] = str(rotation)
-            out.append(",".join(row))
+            # Re-quote all fields to stay consistent with KiCad's output style.
+            out.append(",".join(f'"{v}"' for v in row))
         dest.write_text("\n".join(out) + "\n")
 
     logger.info("CPL files written to %s", ASSEMBLY_DIR)
