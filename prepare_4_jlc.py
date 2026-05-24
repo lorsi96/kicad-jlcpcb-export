@@ -32,8 +32,8 @@ PNP_DIR = REPO_ROOT / "output" / "PnP"
 ASSEMBLY_DIR = REPO_ROOT / "output" / "Assembly"
 ROTATION_CSV = SCRIPT_DIR / "rotation_offsets.csv"
 
-GERBER_SUFFIXES = {"gtl", "g2", "g3", "gbl", "gta", "gba", "gtp", "gbp",
-                   "gto", "gbo", "gts", "gbs", "gbr", "gm1", "drl"}
+GERBER_SUFFIXES = {"gtl", "g1", "g2", "g3", "gbl", "gta", "gba", "gtp", "gbp",
+                   "gto", "gbo", "gts", "gbs", "gbr", "gm1", "drl", "gbrjob"}
 
 CPL_COLUMN_RENAMES = {
     "Ref": "Designator",
